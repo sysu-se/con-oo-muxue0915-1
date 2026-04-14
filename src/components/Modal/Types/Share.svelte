@@ -8,7 +8,7 @@
 	export let data = {};
 	export let hideModal;
 
-	const sencode = grid.getSencode($grid);
+	const sencode = grid.getSencode();
 
 	const link = BASE_URL + '#' + sencode;
 	const encodedLink = encodeURIComponent(link);
