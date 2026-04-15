@@ -130,9 +130,29 @@ function createSudokuCore({ puzzleGrid, currentGrid }) {
 		},
 
 		toString() {
-			return grid
-				.map((row) => row.map((n) => (n === 0 ? '.' : String(n))).join(' '))
-				.join('\n');
+			const border = '╔═══════╤═══════╤═══════╗';
+			const middle = '╟───────┼───────┼───────╢';
+			const bottom = '╚═══════╧═══════╧═══════╝';
+
+			let out = border + '\n';
+			for (let row = 0; row < GRID_SIZE; row++) {
+				if (row !== 0 && row % 3 === 0) {
+					out += middle + '\n';
+				}
+				for (let col = 0; col < GRID_SIZE; col++) {
+					if (col % 3 === 0) out += '║ ';
+					else if (col !== 0) out += ' ';
+					
+					const val = grid[row][col];
+					out += val === 0 ? '·' : val;
+					
+					if (col === GRID_SIZE - 1) out += ' ║';
+					else if (col % 3 !== 2) out += ''; 
+				}
+				out += '\n';
+			}
+			out += bottom;
+			return out;
 		},
 	};
 }
@@ -168,12 +188,13 @@ function createGameCore({ sudoku, undoStack = [], redoStack = [] }) {
 		},
 
 		guess(move) {
-			const before = currentSudoku.toJSON();
+			const beforeGrid = currentSudoku.getGrid();
 			const changed = currentSudoku.guess(move);
 			if (!changed) {
 				return false;
 			}
-			past.push(before);
+			// Only store the grid in history, not the entire sudoku snapshot
+			past.push(beforeGrid);
 			future = [];
 			return true;
 		},
@@ -182,9 +203,15 @@ function createGameCore({ sudoku, undoStack = [], redoStack = [] }) {
 			if (!past.length) {
 				return false;
 			}
-			future.push(currentSudoku.toJSON());
-			const previous = past.pop();
-			currentSudoku = createSudokuFromJSON(previous);
+			future.push(currentSudoku.getGrid());
+			const previousGrid = past.pop();
+			
+			// Reuse the same puzzle grid, only update the current grid
+			const puzzleGrid = currentSudoku.getPuzzleGrid();
+			currentSudoku = createSudokuCore({
+				puzzleGrid,
+				currentGrid: previousGrid,
+			});
 			return true;
 		},
 
@@ -192,9 +219,14 @@ function createGameCore({ sudoku, undoStack = [], redoStack = [] }) {
 			if (!future.length) {
 				return false;
 			}
-			past.push(currentSudoku.toJSON());
-			const next = future.pop();
-			currentSudoku = createSudokuFromJSON(next);
+			past.push(currentSudoku.getGrid());
+			const nextGrid = future.pop();
+			
+			const puzzleGrid = currentSudoku.getPuzzleGrid();
+			currentSudoku = createSudokuCore({
+				puzzleGrid,
+				currentGrid: nextGrid,
+			});
 			return true;
 		},
 
@@ -209,14 +241,8 @@ function createGameCore({ sudoku, undoStack = [], redoStack = [] }) {
 		toJSON() {
 			return {
 				sudoku: currentSudoku.toJSON(),
-				undoStack: past.map((entry) => ({
-					puzzle: cloneGrid(entry.puzzle),
-					grid: cloneGrid(entry.grid),
-				})),
-				redoStack: future.map((entry) => ({
-					puzzle: cloneGrid(entry.puzzle),
-					grid: cloneGrid(entry.grid),
-				})),
+				undoStack: past.map((grid) => cloneGrid(grid)),
+				redoStack: future.map((grid) => cloneGrid(grid)),
 			};
 		},
 	};
@@ -237,9 +263,8 @@ export function createGameFromJSON(json) {
 	const undoStack = Array.isArray(json.undoStack) ? json.undoStack : [];
 	const redoStack = Array.isArray(json.redoStack) ? json.redoStack : [];
 
-	for (const entry of [...undoStack, ...redoStack]) {
-		assertGrid(entry.puzzle);
-		assertGrid(entry.grid);
+	for (const grid of [...undoStack, ...redoStack]) {
+		assertGrid(grid);
 	}
 
 	return createGameCore({
